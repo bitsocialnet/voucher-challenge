@@ -14,17 +14,42 @@ Standalone voucher challenge extracted from `plebbit-js`, packaged with independ
 
 ## Install
 
+### With bitsocial-cli
+
+```bash
+bitsocial challenge install @bitsocial/voucher-challenge
+```
+
+### With npm
+
+If you are running your own node locally without connecting over RPC, you can install via npm and register the challenge manually:
+
 ```bash
 npm install @bitsocial/voucher-challenge
 ```
-
-## Usage
 
 ```ts
 import Plebbit from "@plebbit/plebbit-js";
 import { voucherChallenge } from "@bitsocial/voucher-challenge";
 
 Plebbit.challenges["voucher"] = voucherChallenge;
+```
+
+Then set the challenge on your subplebbit:
+
+```ts
+await subplebbit.edit({
+  settings: {
+    challenges: [
+      {
+        name: "voucher",
+        options: {
+          vouchers: "VOUCHER1,VOUCHER2,VOUCHER3"
+        }
+      }
+    ]
+  }
+});
 ```
 
 ## Challenge Options
