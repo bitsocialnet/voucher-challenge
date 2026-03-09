@@ -1,0 +1,60 @@
+{
+  "name": "@bitsocial/voucher-challenge",
+  "version": "0.1.0",
+  "description": "Standalone voucher challenge for plebbit-js",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "AGENTS.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "prepare": "husky",
+    "release": "HUSKY=0 release-it --config config/.release-it.json"
+  },
+  "keywords": [
+    "bitsocial",
+    "plebbit",
+    "pkc",
+    "challenge",
+    "voucher"
+  ],
+  "author": "Rinse",
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "20.4.3",
+    "@commitlint/config-conventional": "20.4.3",
+    "@plebbit/plebbit-js": "https://github.com/plebbit/plebbit-js#10ed04e3866dd986a7f802bc9efd027f0e7d465b",
+    "@release-it/conventional-changelog": "10.0.5",
+    "@types/node": "25.3.5",
+    "commitizen": "4.3.1",
+    "cz-conventional-changelog": "3.3.0",
+    "husky": "9.1.7",
+    "release-it": "19.2.4",
+    "remeda": "2.29.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
+  }
+}
