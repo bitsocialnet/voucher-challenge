@@ -2,10 +2,9 @@
 
 Standalone voucher challenge extracted from `plebbit-js`, packaged with independent dependencies.
 
-## Status
+## How it works
 
-- Runtime peer dependency is currently `@plebbit/plebbit-js`.
-- This package is expected to migrate to `@pkc/pkc-js` soon.
+Community owners configure a list of voucher codes on their community. When a user publishes for the first time, they are prompted to enter a voucher code. Once redeemed, the voucher becomes permanently bound to the user's `author.address` — that author can continue using the same voucher for future publications (posts, replies, votes), but no other author can claim it. This prevents voucher sharing across different users.
 
 ## Requirements
 
@@ -20,7 +19,15 @@ Standalone voucher challenge extracted from `plebbit-js`, packaged with independ
 bitsocial challenge install @bitsocial/voucher-challenge
 ```
 
-### With npm
+Edit your community to use the challenge:
+
+```bash
+bitsocial community edit your-community.bso \
+  '--settings.challenges[0].name' voucher \
+  '--settings.challenges[0].options.vouchers' 'VOUCHER1,VOUCHER2,VOUCHER3'
+```
+
+### With pkc-js (TypeScript)
 
 If you are running your own node locally without connecting over RPC, you can install via npm and register the challenge manually:
 
@@ -29,16 +36,16 @@ npm install @bitsocial/voucher-challenge
 ```
 
 ```ts
-import Plebbit from "@plebbit/plebbit-js";
+import PKC from "@pkcprotocol/pkc-js";
 import { voucherChallenge } from "@bitsocial/voucher-challenge";
 
-Plebbit.challenges["voucher"] = voucherChallenge;
+PKC.challenges["voucher"] = voucherChallenge;
 ```
 
-Then set the challenge on your subplebbit:
+Then set the challenge on your community:
 
 ```ts
-await subplebbit.edit({
+await community.edit({
   settings: {
     challenges: [
       {
@@ -54,11 +61,15 @@ await subplebbit.edit({
 
 ## Challenge Options
 
-- `question`: The question to ask for the voucher code (default: `What is your voucher code?`)
-- `vouchers`: Comma-separated list of voucher codes available for redemption (required)
-- `description`: Custom description for the challenge
-- `invalidVoucherError`: Error message shown when an invalid voucher code is entered
-- `alreadyRedeemedError`: Error message shown when a voucher has already been redeemed by someone else
+All option values must be strings.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `question` | `"What is your voucher code?"` | The interactive prompt the user is asked to type an answer to |
+| `vouchers` | *(required)* | Comma-separated list of voucher codes |
+| `description` | — | Informational text shown in the UI explaining what the challenge is about |
+| `invalidVoucherError` | Default message | Error shown for invalid voucher codes |
+| `alreadyRedeemedError` | Default message | Error shown when a voucher is already redeemed by another author |
 
 ## Scripts
 
