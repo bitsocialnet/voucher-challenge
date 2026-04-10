@@ -1,5 +1,7 @@
 # Changelog
 
+## [0.1.2](https://github.com/bitsocialnet/voucher-challenge/compare/v0.1.1...v0.1.2) (2026-04-10)
+
 ## 0.1.1 (2026-04-10)
 
 ### Features

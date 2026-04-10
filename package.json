@@ -1,6 +1,6 @@
 {
   "name": "@bitsocial/voucher-challenge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Standalone voucher challenge for pkc-js",
   "type": "module",
   "main": "./dist/index.js",
