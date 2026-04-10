@@ -34,7 +34,7 @@
     "voucher"
   ],
   "author": "Rinse",
-  "license": "GPL-3.0-only",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bitsocialnet/voucher-challenge.git"
