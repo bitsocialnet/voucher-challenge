@@ -1,9 +1,9 @@
 # AGENTS Notes
 
-- Current compatibility target: `@plebbit/plebbit-js`
-- Planned migration target: `@pkc/pkc-js`
+- Current compatibility target: `@pkcprotocol/pkc-js`
 - This repo is ESM only and will only run in Node.js.
 - Everything in this repo should be fully typed, including tests.
+- Assume this repo will be ran in node v22+
 
 Workflow:
 

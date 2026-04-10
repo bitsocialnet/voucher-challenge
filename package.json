@@ -1,7 +1,7 @@
 {
   "name": "@bitsocial/voucher-challenge",
   "version": "0.1.0",
-  "description": "Standalone voucher challenge for plebbit-js",
+  "description": "Standalone voucher challenge for pkc-js",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -35,13 +35,20 @@
   ],
   "author": "Rinse",
   "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bitsocialnet/voucher-challenge.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22.0.0"
   },
   "devDependencies": {
     "@commitlint/cli": "20.4.3",
     "@commitlint/config-conventional": "20.4.3",
-    "@plebbit/plebbit-js": "https://github.com/plebbit/plebbit-js#10ed04e3866dd986a7f802bc9efd027f0e7d465b",
+    "@pkcprotocol/pkc-js": "0.0.11",
     "@release-it/conventional-changelog": "10.0.5",
     "@types/node": "25.3.5",
     "commitizen": "4.3.1",

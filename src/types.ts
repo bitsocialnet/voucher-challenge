@@ -3,7 +3,9 @@ export type {
   ChallengeInput,
   ChallengeResultInput,
   GetChallengeArgsInput,
-  SubplebbitChallengeSetting
-} from "@plebbit/plebbit-js/dist/node/subplebbit/types";
+  CommunityChallengeSetting
+} from "@pkcprotocol/pkc-js/challenges";
 
-export type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit";
+import type { GetChallengeArgsInput } from "@pkcprotocol/pkc-js/challenges";
+
+export type LocalCommunity = GetChallengeArgsInput["community"];

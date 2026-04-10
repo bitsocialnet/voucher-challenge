@@ -10,7 +10,7 @@ describe("voucher challenge", () => {
     let tempDir: string;
 
     beforeEach(() => {
-        tempDir = path.join(tmpdir(), "plebbit-test-" + Math.random().toString(36));
+        tempDir = path.join(tmpdir(), "pkc-test-" + Math.random().toString(36));
     });
 
     afterEach(async () => {
@@ -39,7 +39,7 @@ describe("voucher challenge", () => {
             },
             content: "test content",
             timestamp: 1234567890,
-            subplebbitAddress: "subplebbitAddress"
+            communityAddress: "communityAddress"
         };
 
         return {
@@ -51,15 +51,15 @@ describe("voucher challenge", () => {
         };
     };
 
-    const createSubplebbit = (options: VoucherOptions = {}) => {
+    const createCommunity = (options: VoucherOptions = {}) => {
         const defaultOptions: VoucherOptions = {
             question: "What is your voucher code?",
             vouchers: "VOUCHER1,VOUCHER2,VOUCHER3"
         };
 
         return {
-            address: "test-subplebbit-address",
-            _plebbit: {
+            address: "test-community-address",
+            _pkc: {
                 dataPath: tempDir
             },
             settings: {
@@ -77,14 +77,14 @@ describe("voucher challenge", () => {
     };
 
     const getChallengeArgs = (
-        subplebbit: ReturnType<typeof createSubplebbit>,
+        community: ReturnType<typeof createCommunity>,
         challengeRequestMessage: ReturnType<typeof createChallengeRequestMessage>,
         challengeIndex = 0
     ): GetChallengeArgsInput => ({
-        challengeSettings: subplebbit.settings.challenges[0] as GetChallengeArgsInput["challengeSettings"],
+        challengeSettings: community.settings.challenges[0] as GetChallengeArgsInput["challengeSettings"],
         challengeRequestMessage: challengeRequestMessage as unknown as GetChallengeArgsInput["challengeRequestMessage"],
         challengeIndex,
-        subplebbit: subplebbit as unknown as GetChallengeArgsInput["subplebbit"]
+        community: community as unknown as GetChallengeArgsInput["community"]
     });
 
     const isChallengeInput = (result: ChallengeInput | ChallengeResultInput): result is ChallengeInput => {
@@ -116,11 +116,11 @@ describe("voucher challenge", () => {
 
     describe("challenge verification", () => {
         it("accepts valid voucher codes", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {
@@ -130,11 +130,11 @@ describe("voucher challenge", () => {
         });
 
         it("rejects invalid voucher codes", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {
@@ -147,11 +147,11 @@ describe("voucher challenge", () => {
         });
 
         it("allows same author to reuse their voucher", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {
@@ -166,15 +166,15 @@ describe("voucher challenge", () => {
         });
 
         it("rejects voucher already redeemed by different author", async () => {
-            const subplebbit = createSubplebbit();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
             // First author redeems voucher
             const challengeRequestMessage1 = createChallengeRequestMessage({
                 publication: { author: { address: "author1" } }
             });
 
-            const result1 = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage1));
+            const result1 = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage1));
 
             expect(isChallengeInput(result1)).to.be.true;
             if (isChallengeInput(result1)) {
@@ -187,7 +187,7 @@ describe("voucher challenge", () => {
                 publication: { author: { address: "author2" } }
             });
 
-            const result2 = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage2));
+            const result2 = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage2));
 
             expect(isChallengeInput(result2)).to.be.true;
             if (isChallengeInput(result2)) {
@@ -200,26 +200,26 @@ describe("voucher challenge", () => {
         });
 
         it("handles pre-answered challenges correctly", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage({
                 challengeAnswers: ["VOUCHER1"]
             });
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.false;
             expect((result as ChallengeResultInput).success).to.be.true;
         });
 
         it("rejects pre-answered challenges with invalid voucher", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage({
                 challengeAnswers: ["INVALID_VOUCHER"]
             });
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.false;
             const challengeResult = result as ChallengeResultInput;
@@ -232,13 +232,13 @@ describe("voucher challenge", () => {
 
     describe("custom error messages", () => {
         it("uses custom invalid voucher error message", async () => {
-            const subplebbit = createSubplebbit({
+            const community = createCommunity({
                 invalidVoucherError: "Custom invalid code message"
             });
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {
@@ -251,17 +251,17 @@ describe("voucher challenge", () => {
         });
 
         it("uses custom already redeemed error message", async () => {
-            const subplebbit = createSubplebbit({
+            const community = createCommunity({
                 alreadyRedeemedError: "Custom already used message"
             });
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
             // First author redeems voucher
             const challengeRequestMessage1 = createChallengeRequestMessage({
                 publication: { author: { address: "author1" } }
             });
 
-            const result1 = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage1));
+            const result1 = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage1));
 
             if (isChallengeInput(result1)) {
                 await result1.verify!("VOUCHER1");
@@ -272,7 +272,7 @@ describe("voucher challenge", () => {
                 publication: { author: { address: "author2" } }
             });
 
-            const result2 = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage2));
+            const result2 = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage2));
 
             expect(isChallengeInput(result2)).to.be.true;
             if (isChallengeInput(result2)) {
@@ -287,11 +287,11 @@ describe("voucher challenge", () => {
 
     describe("file persistence", () => {
         it("persists voucher redemptions to file", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             if (isChallengeInput(result)) {
                 await result.verify!("VOUCHER1");
@@ -300,8 +300,8 @@ describe("voucher challenge", () => {
             // Check that state file was created
             const stateFilePath = path.join(
                 tempDir,
-                "subplebbits",
-                `${subplebbit.address}-challenge-data`,
+                "communities",
+                `${community.address}-challenge-data`,
                 "voucher_redemption_states.json"
             );
 
@@ -313,10 +313,10 @@ describe("voucher challenge", () => {
         });
 
         it("loads existing redemption state from file", async () => {
-            const subplebbit = createSubplebbit();
+            const community = createCommunity();
 
             // Create state file manually
-            const stateDir = path.join(tempDir, "subplebbits", `${subplebbit.address}-challenge-data`);
+            const stateDir = path.join(tempDir, "communities", `${community.address}-challenge-data`);
             const stateFilePath = path.join(stateDir, "voucher_redemption_states.json");
 
             await fs.promises.mkdir(stateDir, { recursive: true });
@@ -331,9 +331,9 @@ describe("voucher challenge", () => {
             const challengeRequestMessage = createChallengeRequestMessage({
                 publication: { author: { address: "different_author" } }
             });
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {
@@ -348,23 +348,23 @@ describe("voucher challenge", () => {
 
     describe("edge cases", () => {
         it("throws error when no vouchers configured", async () => {
-            const subplebbit = createSubplebbit({ vouchers: "" });
+            const community = createCommunity({ vouchers: "" });
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
             await expect(
-                challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage))
+                challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage))
             ).rejects.toThrow("No vouchers configured");
         });
 
         it("handles whitespace in voucher list", async () => {
-            const subplebbit = createSubplebbit({
+            const community = createCommunity({
                 vouchers: " VOUCHER1 , VOUCHER2 , VOUCHER3 "
             });
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {
@@ -374,13 +374,13 @@ describe("voucher challenge", () => {
         });
 
         it("filters out empty voucher codes", async () => {
-            const subplebbit = createSubplebbit({
+            const community = createCommunity({
                 vouchers: "VOUCHER1,,VOUCHER2,"
             });
             const challengeRequestMessage = createChallengeRequestMessage();
-            const challengeFile = voucherChallenge({ challengeSettings: subplebbit.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
-            const result = await challengeFile.getChallenge(getChallengeArgs(subplebbit, challengeRequestMessage));
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
 
             expect(isChallengeInput(result)).to.be.true;
             if (isChallengeInput(result)) {

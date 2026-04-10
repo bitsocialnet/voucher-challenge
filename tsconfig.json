@@ -12,11 +12,7 @@
     "resolveJsonModule": true,
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": false,
-    "types": ["node", "vitest/globals"],
-    "paths": {
-      "@plebbit/plebbit-js/dist/node/subplebbit/types": ["./node_modules/@plebbit/plebbit-js/dist/node/subplebbit/types"],
-      "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit": ["./node_modules/@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit"]
-    }
+    "types": ["node", "vitest/globals"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"],
   "exclude": ["dist", "node_modules"]

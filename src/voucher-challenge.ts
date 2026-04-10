@@ -3,11 +3,11 @@ import type {
     ChallengeInput,
     ChallengeResultInput,
     GetChallengeArgsInput,
-    SubplebbitChallengeSetting
+    CommunityChallengeSetting
 } from "./types.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { LocalSubplebbit } from "./types.js";
+import type { LocalCommunity } from "./types.js";
 
 const defaultDescription =
     "Distribute unique voucher codes to specific authors. Each author gets their own voucher code that only works for them.";
@@ -53,13 +53,13 @@ const optionInputs = <NonNullable<ChallengeFileInput["optionInputs"]>>[
 
 const type: ChallengeInput["type"] = "text/plain";
 
-const getVoucherStateFilePath = (subplebbit: LocalSubplebbit): string => {
-    const challengeDataDir = path.join(subplebbit._plebbit.dataPath!, "subplebbits", `${subplebbit.address}-challenge-data`);
+const getVoucherStateFilePath = (community: LocalCommunity): string => {
+    const challengeDataDir = path.join(community._pkc.dataPath!, "communities", `${community.address}-challenge-data`);
     return path.join(challengeDataDir, "voucher_redemption_states.json");
 };
 
-const loadRedeemedVouchers = async (subplebbit: LocalSubplebbit): Promise<Record<string, string>> => {
-    const filePath = getVoucherStateFilePath(subplebbit);
+const loadRedeemedVouchers = async (community: LocalCommunity): Promise<Record<string, string>> => {
+    const filePath = getVoucherStateFilePath(community);
 
     try {
         const data = await fs.promises.readFile(filePath, "utf8");
@@ -75,8 +75,8 @@ const loadRedeemedVouchers = async (subplebbit: LocalSubplebbit): Promise<Record
     }
 };
 
-const saveRedeemedVouchers = async (subplebbit: LocalSubplebbit, redeemedVouchers: Record<string, string>): Promise<void> => {
-    const filePath = getVoucherStateFilePath(subplebbit);
+const saveRedeemedVouchers = async (community: LocalCommunity, redeemedVouchers: Record<string, string>): Promise<void> => {
+    const filePath = getVoucherStateFilePath(community);
     const dir = path.dirname(filePath);
 
     await fs.promises.mkdir(dir, { recursive: true });
@@ -87,7 +87,7 @@ const getChallenge = async ({
     challengeSettings,
     challengeRequestMessage,
     challengeIndex,
-    subplebbit
+    community
 }: GetChallengeArgsInput): Promise<ChallengeInput | ChallengeResultInput> => {
     if (!challengeSettings?.options?.question) throw Error("No option question");
 
@@ -104,7 +104,7 @@ const getChallenge = async ({
         throw Error("No valid vouchers configured");
     }
 
-    const redeemedVouchers = await loadRedeemedVouchers(subplebbit);
+    const redeemedVouchers = await loadRedeemedVouchers(community);
 
     const invalidVoucherError = challengeSettings?.options?.invalidVoucherError || "Invalid voucher code.";
     const alreadyRedeemedError =
@@ -116,7 +116,7 @@ const getChallenge = async ({
             challengeRequestMessage?.vote?.author?.address ||
             challengeRequestMessage?.commentEdit?.author?.address ||
             challengeRequestMessage?.commentModeration?.author?.address ||
-            challengeRequestMessage?.subplebbitEdit?.author?.address
+            challengeRequestMessage?.communityEdit?.author?.address
         );
     };
 
@@ -152,7 +152,7 @@ const getChallenge = async ({
                 }
 
                 redeemedVouchers[_answer] = authorAddress;
-                await saveRedeemedVouchers(subplebbit, redeemedVouchers);
+                await saveRedeemedVouchers(community, redeemedVouchers);
 
                 return {
                     success: true
@@ -178,7 +178,7 @@ const getChallenge = async ({
 
     if (redeemedVouchers[challengeAnswer] !== authorAddress) {
         redeemedVouchers[challengeAnswer] = authorAddress;
-        await saveRedeemedVouchers(subplebbit, redeemedVouchers);
+        await saveRedeemedVouchers(community, redeemedVouchers);
     }
 
     return {
@@ -186,7 +186,7 @@ const getChallenge = async ({
     };
 };
 
-function ChallengeFileFactory({ challengeSettings }: { challengeSettings: SubplebbitChallengeSetting }): ChallengeFileInput {
+function ChallengeFileFactory({ challengeSettings }: { challengeSettings: CommunityChallengeSetting }): ChallengeFileInput {
     const question = challengeSettings?.options?.question;
     const challenge = question;
     const description = challengeSettings?.options?.description || defaultDescription;
