@@ -27,6 +27,39 @@ bitsocial community edit your-community.bso \
   '--settings.challenges[0].options.vouchers' 'VOUCHER1,VOUCHER2,VOUCHER3'
 ```
 
+### With pkc-js over RPC
+
+If your RPC server is already running, first install the challenge on the server:
+
+```bash
+bitsocial challenge install @bitsocial/voucher-challenge
+```
+
+Then from your RPC client, connect and set the challenge on your community by name — no npm install or challenge registration needed on the client side:
+
+```ts
+import PKC from "@pkcprotocol/pkc-js";
+
+const pkc = await PKC({
+  pkcRpcClientsOptions: ["ws://localhost:9138"]
+});
+
+const community = await pkc.createCommunity({ address: "your-community-address.bso" });
+
+await community.edit({
+  settings: {
+    challenges: [
+      {
+        name: "voucher",
+        options: {
+          vouchers: "VOUCHER1,VOUCHER2,VOUCHER3"
+        }
+      }
+    ]
+  }
+});
+```
+
 ### With pkc-js (TypeScript)
 
 If you are running your own node locally without connecting over RPC, you can install via npm and register the challenge manually:
