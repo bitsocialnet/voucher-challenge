@@ -23,7 +23,7 @@ Edit your community to use the challenge:
 
 ```bash
 bitsocial community edit your-community.bso \
-  '--settings.challenges[0].name' voucher \
+  '--settings.challenges[0].name' @bitsocial/voucher-challenge \
   '--settings.challenges[0].options.vouchers' 'VOUCHER1,VOUCHER2,VOUCHER3'
 ```
 
@@ -50,7 +50,7 @@ await community.edit({
   settings: {
     challenges: [
       {
-        name: "voucher",
+        name: "@bitsocial/voucher-challenge",
         options: {
           vouchers: "VOUCHER1,VOUCHER2,VOUCHER3"
         }
@@ -72,7 +72,7 @@ npm install @bitsocial/voucher-challenge
 import PKC from "@pkcprotocol/pkc-js";
 import { voucherChallenge } from "@bitsocial/voucher-challenge";
 
-PKC.challenges["voucher"] = voucherChallenge;
+PKC.challenges["@bitsocial/voucher-challenge"] = voucherChallenge;
 ```
 
 Then set the challenge on your community:
@@ -82,7 +82,7 @@ await community.edit({
   settings: {
     challenges: [
       {
-        name: "voucher",
+        name: "@bitsocial/voucher-challenge",
         options: {
           vouchers: "VOUCHER1,VOUCHER2,VOUCHER3"
         }

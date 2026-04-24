@@ -65,7 +65,7 @@ describe("voucher challenge", () => {
             settings: {
                 challenges: [
                     {
-                        name: "voucher",
+                        name: "@bitsocial/voucher-challenge",
                         options: {
                             ...defaultOptions,
                             ...options
