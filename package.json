@@ -63,5 +63,21 @@
     "commitizen": {
       "path": "cz-conventional-changelog"
     }
+  },
+  "overrides": {
+    "@pkcprotocol/pkc-js": {
+      "@libp2p/gossipsub": "16.0.5",
+      "jose": "4.15.9",
+      "probe-image-size": "7.4.0",
+      "uuid@8": "11.1.1",
+      "uuid@13": "13.0.1"
+    },
+    "get-uri": {
+      "basic-ftp": "6.2.3"
+    },
+    "protobufjs": "7.6.6",
+    "release-it": {
+      "undici": "6.29.1"
+    }
   }
 }
