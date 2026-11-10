@@ -97,17 +97,24 @@ const withStateFileLock = async <T>(filePath: string, task: () => Promise<T>): P
     }
 };
 
-// Binds the voucher to the author unless another author already holds it. Returns false in that case.
-const redeemVoucher = (community: LocalCommunity, voucher: string, authorAddress: string): Promise<boolean> =>
+// Binds the voucher to the author's public key unless another author already holds it. Returns false in that case.
+const redeemVoucher = (
+    community: LocalCommunity,
+    voucher: string,
+    author: { publicKey: string; address: string }
+): Promise<boolean> =>
     withStateFileLock(getVoucherStateFilePath(community), async () => {
         const redeemedVouchers = await loadRedeemedVouchers(community);
+        const holder = redeemedVouchers[voucher];
 
-        if (redeemedVouchers[voucher] && redeemedVouchers[voucher] !== authorAddress) return false;
+        if (holder === author.publicKey) return true;
 
-        if (redeemedVouchers[voucher] !== authorAddress) {
-            redeemedVouchers[voucher] = authorAddress;
-            await saveRedeemedVouchers(community, redeemedVouchers);
-        }
+        // Older versions stored author.address, which is the author's domain name when they have one.
+        // Such an entry is rebound to the public key of the author who presents that address.
+        if (holder && holder !== author.address) return false;
+
+        redeemedVouchers[voucher] = author.publicKey;
+        await saveRedeemedVouchers(community, redeemedVouchers);
         return true;
     });
 
@@ -136,20 +143,24 @@ const getChallenge = async ({
     const alreadyRedeemedError =
         challengeSettings?.options?.alreadyRedeemedError || "This voucher has already been redeemed by another author.";
 
-    const getAuthorAddress = (): string | undefined => {
+    const getAuthor = () => {
         return (
-            challengeRequestMessage?.comment?.author?.address ||
-            challengeRequestMessage?.vote?.author?.address ||
-            challengeRequestMessage?.commentEdit?.author?.address ||
-            challengeRequestMessage?.commentModeration?.author?.address ||
-            challengeRequestMessage?.communityEdit?.author?.address
+            challengeRequestMessage?.comment?.author ||
+            challengeRequestMessage?.vote?.author ||
+            challengeRequestMessage?.commentEdit?.author ||
+            challengeRequestMessage?.commentModeration?.author ||
+            challengeRequestMessage?.communityEdit?.author
         );
     };
 
-    const authorAddress = getAuthorAddress();
+    const author = getAuthor();
+    const authorAddress = author?.address;
     if (!authorAddress) {
         throw Error("No author address found");
     }
+    // pkc-js sets author.address to the author's domain name when they have one, else to their public key.
+    // Vouchers are bound to the public key, which stays the same when the author sets or removes a name.
+    const authorIdentity = { publicKey: author.publicKey || authorAddress, address: authorAddress };
 
     // Checks the answer against the state file as it is at answer time, not when the challenge was requested,
     // because pkc-js can hold a pending challenge for minutes while other authors redeem vouchers.
@@ -161,7 +172,7 @@ const getChallenge = async ({
             };
         }
 
-        if (!(await redeemVoucher(community, answer, authorAddress))) {
+        if (!(await redeemVoucher(community, answer, authorIdentity))) {
             return {
                 success: false,
                 error: alreadyRedeemedError

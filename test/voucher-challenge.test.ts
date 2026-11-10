@@ -35,7 +35,8 @@ describe("voucher challenge", () => {
     const createChallengeRequestMessage = (overrides: ChallengeRequestOverrides = {}) => {
         const defaultPublication = {
             author: {
-                address: "12D3test123"
+                address: "12D3test123",
+                publicKey: "12D3test123"
             },
             content: "test content",
             timestamp: 1234567890,
@@ -472,6 +473,72 @@ describe("voucher challenge", () => {
             const successes = results.filter((result) => !isChallengeInput(result) && result.success === true);
             expect(successes).to.have.length(1);
             expect(Object.keys(await readStateFile(community))).to.deep.equal(["VOUCHER1"]);
+        });
+    });
+
+    describe("author identity", () => {
+        interface RuntimeAuthor {
+            address: string;
+            publicKey: string;
+            name?: string;
+        }
+
+        const verifyAs = async (
+            challengeFile: ReturnType<typeof voucherChallenge>,
+            community: ReturnType<typeof createCommunity>,
+            author: RuntimeAuthor,
+            voucher: string
+        ): Promise<ChallengeResultInput> => {
+            const challengeRequestMessage = createChallengeRequestMessage({ publication: { author } });
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
+            if (!isChallengeInput(result)) throw Error("Expected a pending challenge");
+            return result.verify!(voucher);
+        };
+
+        const stateFilePath = (community: ReturnType<typeof createCommunity>): string =>
+            path.join(tempDir, "communities", `${community.address}-challenge-data`, "voucher_redemption_states.json");
+
+        // pkc-js sets author.address to author.name when the author has a domain name, else to the signer's public key
+        const aliceWithoutName: RuntimeAuthor = { address: "12D3aliceKey", publicKey: "12D3aliceKey" };
+        const aliceWithName: RuntimeAuthor = { name: "alice.bso", address: "alice.bso", publicKey: "12D3aliceKey" };
+
+        it("accepts the voucher holder after they set an author name", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            expect((await verifyAs(challengeFile, community, aliceWithoutName, "VOUCHER1")).success).to.be.true;
+            expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+        });
+
+        it("accepts the voucher holder after they remove their author name", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+            expect((await verifyAs(challengeFile, community, aliceWithoutName, "VOUCHER1")).success).to.be.true;
+        });
+
+        it("rejects another signer that presents the holder's author name", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const otherSignerWithAliceName: RuntimeAuthor = { name: "alice.bso", address: "alice.bso", publicKey: "12D3otherKey" };
+
+            expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+            const verification = await verifyAs(challengeFile, community, otherSignerWithAliceName, "VOUCHER1");
+            expect(verification.success).to.be.false;
+            if (verification.success === false) {
+                expect(verification.error).to.equal("This voucher has already been redeemed by another author.");
+            }
+        });
+
+        it("rebinds a voucher stored under an author name by older versions to the holder's public key", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            await fs.promises.mkdir(path.dirname(stateFilePath(community)), { recursive: true });
+            await fs.promises.writeFile(stateFilePath(community), JSON.stringify({ VOUCHER1: "alice.bso" }));
+
+            expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+            expect(JSON.parse(await fs.promises.readFile(stateFilePath(community), "utf8"))).to.deep.equal({ VOUCHER1: "12D3aliceKey" });
         });
     });
 });

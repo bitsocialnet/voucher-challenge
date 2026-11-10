@@ -4,7 +4,7 @@ Standalone voucher challenge extracted from `plebbit-js`, packaged with independ
 
 ## How it works
 
-Community owners configure a list of voucher codes on their community. When a user publishes for the first time, they are prompted to enter a voucher code. Once redeemed, the voucher becomes permanently bound to the user's `author.address` — that author can continue using the same voucher for future publications (posts, replies, votes), but no other author can claim it. This prevents voucher sharing across different users.
+Community owners configure a list of voucher codes on their community. When a user publishes for the first time, they are prompted to enter a voucher code. Once redeemed, the voucher becomes permanently bound to the author's public key (`author.publicKey`), so it keeps working when the author sets or removes a domain name — that author can continue using the same voucher for future publications (posts, replies, votes), but no other author can claim it. This prevents voucher sharing across different users.
 
 ## Requirements
 
