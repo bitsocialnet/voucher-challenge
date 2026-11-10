@@ -65,12 +65,7 @@ const loadRedeemedVouchers = async (community: LocalCommunity): Promise<Record<s
         const data = await fs.promises.readFile(filePath, "utf8");
         return JSON.parse(data);
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            const dir = path.dirname(filePath);
-            await fs.promises.mkdir(dir, { recursive: true });
-            await fs.promises.writeFile(filePath, JSON.stringify({}, null, 2));
-            return {};
-        }
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
         throw error;
     }
 };
@@ -82,6 +77,39 @@ const saveRedeemedVouchers = async (community: LocalCommunity, redeemedVouchers:
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(filePath, JSON.stringify(redeemedVouchers, null, 2));
 };
+
+// A redemption reads, checks and rewrites the whole state file, so redemptions for one file run one at a time.
+// pkc-js runs a community in a single process, so an in-process queue covers every writer of the file.
+const stateFileQueues = new Map<string, Promise<void>>();
+
+const withStateFileLock = async <T>(filePath: string, task: () => Promise<T>): Promise<T> => {
+    const previous = stateFileQueues.get(filePath) ?? Promise.resolve();
+    const result = previous.then(task);
+    const settled = result.then(
+        () => undefined,
+        () => undefined
+    );
+    stateFileQueues.set(filePath, settled);
+    try {
+        return await result;
+    } finally {
+        if (stateFileQueues.get(filePath) === settled) stateFileQueues.delete(filePath);
+    }
+};
+
+// Binds the voucher to the author unless another author already holds it. Returns false in that case.
+const redeemVoucher = (community: LocalCommunity, voucher: string, authorAddress: string): Promise<boolean> =>
+    withStateFileLock(getVoucherStateFilePath(community), async () => {
+        const redeemedVouchers = await loadRedeemedVouchers(community);
+
+        if (redeemedVouchers[voucher] && redeemedVouchers[voucher] !== authorAddress) return false;
+
+        if (redeemedVouchers[voucher] !== authorAddress) {
+            redeemedVouchers[voucher] = authorAddress;
+            await saveRedeemedVouchers(community, redeemedVouchers);
+        }
+        return true;
+    });
 
 const getChallenge = async ({
     challengeSettings,
@@ -104,8 +132,6 @@ const getChallenge = async ({
         throw Error("No valid vouchers configured");
     }
 
-    const redeemedVouchers = await loadRedeemedVouchers(community);
-
     const invalidVoucherError = challengeSettings?.options?.invalidVoucherError || "Invalid voucher code.";
     const alreadyRedeemedError =
         challengeSettings?.options?.alreadyRedeemedError || "This voucher has already been redeemed by another author.";
@@ -125,65 +151,39 @@ const getChallenge = async ({
         throw Error("No author address found");
     }
 
+    // Checks the answer against the state file as it is at answer time, not when the challenge was requested,
+    // because pkc-js can hold a pending challenge for minutes while other authors redeem vouchers.
+    const verifyVoucher = async (answer: string): Promise<ChallengeResultInput> => {
+        if (!availableVouchers.includes(answer)) {
+            return {
+                success: false,
+                error: invalidVoucherError
+            };
+        }
+
+        if (!(await redeemVoucher(community, answer, authorAddress))) {
+            return {
+                success: false,
+                error: alreadyRedeemedError
+            };
+        }
+
+        return {
+            success: true
+        };
+    };
+
     const challengeAnswer = challengeRequestMessage?.challengeAnswers?.[challengeIndex];
 
     if (challengeAnswer === undefined) {
         return {
             challenge: challengeSettings?.options?.question,
-            verify: async (_answer: string): Promise<ChallengeResultInput> => {
-                if (!availableVouchers.includes(_answer)) {
-                    return {
-                        success: false,
-                        error: invalidVoucherError
-                    };
-                }
-
-                if (redeemedVouchers[_answer] && redeemedVouchers[_answer] !== authorAddress) {
-                    return {
-                        success: false,
-                        error: alreadyRedeemedError
-                    };
-                }
-
-                if (redeemedVouchers[_answer] === authorAddress) {
-                    return {
-                        success: true
-                    };
-                }
-
-                redeemedVouchers[_answer] = authorAddress;
-                await saveRedeemedVouchers(community, redeemedVouchers);
-
-                return {
-                    success: true
-                };
-            },
+            verify: verifyVoucher,
             type
         };
     }
 
-    if (!availableVouchers.includes(challengeAnswer)) {
-        return {
-            success: false,
-            error: invalidVoucherError
-        };
-    }
-
-    if (redeemedVouchers[challengeAnswer] && redeemedVouchers[challengeAnswer] !== authorAddress) {
-        return {
-            success: false,
-            error: alreadyRedeemedError
-        };
-    }
-
-    if (redeemedVouchers[challengeAnswer] !== authorAddress) {
-        redeemedVouchers[challengeAnswer] = authorAddress;
-        await saveRedeemedVouchers(community, redeemedVouchers);
-    }
-
-    return {
-        success: true
-    };
+    return verifyVoucher(challengeAnswer);
 };
 
 function ChallengeFileFactory({ challengeSettings }: { challengeSettings: CommunityChallengeSetting }): ChallengeFileInput {

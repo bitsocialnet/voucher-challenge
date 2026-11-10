@@ -392,4 +392,86 @@ describe("voucher challenge", () => {
             }
         });
     });
+
+    describe("concurrent redemptions", () => {
+        const getPendingChallenge = async (
+            challengeFile: ReturnType<typeof voucherChallenge>,
+            community: ReturnType<typeof createCommunity>,
+            authorAddress: string
+        ): Promise<ChallengeInput> => {
+            const challengeRequestMessage = createChallengeRequestMessage({
+                publication: { author: { address: authorAddress } }
+            });
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
+            if (!isChallengeInput(result)) throw Error("Expected a pending challenge");
+            return result;
+        };
+
+        const readStateFile = async (community: ReturnType<typeof createCommunity>): Promise<Record<string, string>> => {
+            const stateFilePath = path.join(
+                tempDir,
+                "communities",
+                `${community.address}-challenge-data`,
+                "voucher_redemption_states.json"
+            );
+            return JSON.parse(await fs.promises.readFile(stateFilePath, "utf8"));
+        };
+
+        it("rejects a voucher redeemed by another author whose challenge was pending at the same time", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            // Both authors request a challenge before either answers
+            const challenge1 = await getPendingChallenge(challengeFile, community, "author1");
+            const challenge2 = await getPendingChallenge(challengeFile, community, "author2");
+
+            const verification1 = await challenge1.verify!("VOUCHER1");
+            expect(verification1.success).to.be.true;
+
+            const verification2 = await challenge2.verify!("VOUCHER1");
+            expect(verification2.success).to.be.false;
+            if (verification2.success === false) {
+                expect(verification2.error).to.equal("This voucher has already been redeemed by another author.");
+            }
+
+            expect(await readStateFile(community)).to.deep.equal({ VOUCHER1: "author1" });
+        });
+
+        it("keeps every redemption when pending challenges are answered with different vouchers", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            const challenge1 = await getPendingChallenge(challengeFile, community, "author1");
+            const challenge2 = await getPendingChallenge(challengeFile, community, "author2");
+
+            const [verification1, verification2] = await Promise.all([challenge1.verify!("VOUCHER1"), challenge2.verify!("VOUCHER2")]);
+            expect(verification1.success).to.be.true;
+            expect(verification2.success).to.be.true;
+
+            expect(await readStateFile(community)).to.deep.equal({ VOUCHER1: "author1", VOUCHER2: "author2" });
+        });
+
+        it("accepts a pre-answered voucher for only one of two simultaneous requests", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            const results = await Promise.all(
+                ["author1", "author2"].map((authorAddress) =>
+                    challengeFile.getChallenge(
+                        getChallengeArgs(
+                            community,
+                            createChallengeRequestMessage({
+                                publication: { author: { address: authorAddress } },
+                                challengeAnswers: ["VOUCHER1"]
+                            })
+                        )
+                    )
+                )
+            );
+
+            const successes = results.filter((result) => !isChallengeInput(result) && result.success === true);
+            expect(successes).to.have.length(1);
+            expect(Object.keys(await readStateFile(community))).to.deep.equal(["VOUCHER1"]);
+        });
+    });
 });
