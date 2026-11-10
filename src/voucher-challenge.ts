@@ -5,6 +5,7 @@ import type {
     GetChallengeArgsInput,
     CommunityChallengeSetting
 } from "./types.js";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { LocalCommunity } from "./types.js";
@@ -113,7 +114,16 @@ const saveRedeemedVouchers = async (community: LocalCommunity, redeemedVouchers:
     const dir = path.dirname(filePath);
 
     await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(filePath, JSON.stringify(redeemedVouchers, null, 2));
+    // writeFile truncates its target first, so write a temp file in the same directory and rename it over the state
+    // file. A crash or a full disk mid-write then leaves the previous state in place instead of an unparsable file.
+    const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
+    try {
+        await fs.promises.writeFile(tempFilePath, JSON.stringify(redeemedVouchers, null, 2));
+        await fs.promises.rename(tempFilePath, filePath);
+    } catch (error) {
+        await fs.promises.rm(tempFilePath, { force: true });
+        throw error;
+    }
 };
 
 // A redemption reads, checks and rewrites the whole state file, so redemptions for one file run one at a time.

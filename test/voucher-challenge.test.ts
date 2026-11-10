@@ -683,4 +683,40 @@ describe("voucher challenge", () => {
             expect(fs.existsSync(stateFilePathFor("my-community.bso"))).to.be.false;
         });
     });
+
+    describe("failed state file writes", () => {
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it("keeps earlier redemptions when a save fails part way through", async () => {
+            const community = createCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+            const verifyAs = async (authorAddress: string, voucher: string): Promise<ChallengeResultInput> => {
+                const challengeRequestMessage = createChallengeRequestMessage({
+                    publication: { author: { address: authorAddress } }
+                });
+                const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
+                if (!isChallengeInput(result)) throw Error("Expected a pending challenge");
+                return result.verify!(voucher);
+            };
+            const stateFilePath = path.join(tempDir, "communities", `${community.address}-challenge-data`, "voucher_redemption_states.json");
+
+            expect((await verifyAs("author1", "VOUCHER1")).success).to.be.true;
+
+            // fs.promises.writeFile truncates its target before writing, so a crash or a full disk leaves it empty
+            const writeFile = fs.promises.writeFile;
+            vi.spyOn(fs.promises, "writeFile").mockImplementationOnce(async (file) => {
+                await writeFile(file, "");
+                throw Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+            });
+            await expect(verifyAs("author2", "VOUCHER2")).rejects.toThrow("ENOSPC");
+            vi.restoreAllMocks();
+
+            const verification = await verifyAs("author3", "VOUCHER1");
+            expect(verification.success).to.be.false;
+            expect(JSON.parse(await fs.promises.readFile(stateFilePath, "utf8"))).to.deep.equal({ VOUCHER1: "author1" });
+            expect(await fs.promises.readdir(path.dirname(stateFilePath))).to.deep.equal(["voucher_redemption_states.json"]);
+        });
+    });
 });
