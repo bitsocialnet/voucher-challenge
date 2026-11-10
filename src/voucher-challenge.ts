@@ -53,21 +53,59 @@ const optionInputs = <NonNullable<ChallengeFileInput["optionInputs"]>>[
 
 const type: ChallengeInput["type"] = "text/plain";
 
-const getVoucherStateFilePath = (community: LocalCommunity): string => {
-    const challengeDataDir = path.join(community._pkc.dataPath!, "communities", `${community.address}-challenge-data`);
+const getStateFilePathForAddress = (community: LocalCommunity, communityAddress: string): string => {
+    const challengeDataDir = path.join(community._pkc.dataPath!, "communities", `${communityAddress}-challenge-data`);
     return path.join(challengeDataDir, "voucher_redemption_states.json");
 };
 
-const loadRedeemedVouchers = async (community: LocalCommunity): Promise<Record<string, string>> => {
-    const filePath = getVoucherStateFilePath(community);
+// Keyed by the community's signer address, which stays the same when the owner sets or removes a domain name.
+const getVoucherStateFilePath = (community: LocalCommunity): string => getStateFilePathForAddress(community, community.signer.address);
 
+const getModifiedTime = async (filePath: string): Promise<number | undefined> => {
+    try {
+        return (await fs.promises.stat(filePath)).mtimeMs;
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+        throw error;
+    }
+};
+
+const readStateFile = async (filePath: string): Promise<Record<string, string> | undefined> => {
     try {
         const data = await fs.promises.readFile(filePath, "utf8");
         return JSON.parse(data);
     } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
         throw error;
     }
+};
+
+// Older versions keyed the file by community.address. For a community with a domain name, the file for that name
+// holds the redemptions made since the name was set, and the signer-keyed file can hold earlier ones. Merge the
+// legacy file into the signer-keyed file so no redemption is lost; for a voucher in both, the newer file's binding
+// wins. The legacy file is removed only after the merged state is saved, so an interrupted merge is redone next time.
+const mergeLegacyStateFile = async (community: LocalCommunity): Promise<void> => {
+    const filePath = getVoucherStateFilePath(community);
+    const legacyFilePath = getStateFilePathForAddress(community, community.address);
+    if (legacyFilePath === filePath) return;
+
+    const legacyModifiedTime = await getModifiedTime(legacyFilePath);
+    if (legacyModifiedTime === undefined) return;
+    const legacyRedeemedVouchers = (await readStateFile(legacyFilePath)) ?? {};
+    const modifiedTime = await getModifiedTime(filePath);
+    const redeemedVouchers = (await readStateFile(filePath)) ?? {};
+
+    const legacyIsNewer = modifiedTime === undefined || legacyModifiedTime > modifiedTime;
+    await saveRedeemedVouchers(
+        community,
+        legacyIsNewer ? { ...redeemedVouchers, ...legacyRedeemedVouchers } : { ...legacyRedeemedVouchers, ...redeemedVouchers }
+    );
+    await fs.promises.rm(legacyFilePath, { force: true });
+};
+
+const loadRedeemedVouchers = async (community: LocalCommunity): Promise<Record<string, string>> => {
+    await mergeLegacyStateFile(community);
+    return (await readStateFile(getVoucherStateFilePath(community))) ?? {};
 };
 
 const saveRedeemedVouchers = async (community: LocalCommunity, redeemedVouchers: Record<string, string>): Promise<void> => {

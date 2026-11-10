@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { voucherChallenge } from "../src/index.js";
 import type { ChallengeInput, ChallengeResultInput, GetChallengeArgsInput } from "../src/types.js";
 import * as remeda from "remeda";
@@ -60,6 +60,9 @@ describe("voucher challenge", () => {
 
         return {
             address: "test-community-address",
+            signer: {
+                address: "test-community-address"
+            },
             _pkc: {
                 dataPath: tempDir
             },
@@ -539,6 +542,145 @@ describe("voucher challenge", () => {
 
             expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
             expect(JSON.parse(await fs.promises.readFile(stateFilePath(community), "utf8"))).to.deep.equal({ VOUCHER1: "12D3aliceKey" });
+        });
+    });
+
+    describe("community address changes", () => {
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        const verifyAs = async (
+            challengeFile: ReturnType<typeof voucherChallenge>,
+            community: ReturnType<typeof createCommunity>,
+            authorAddress: string,
+            voucher: string
+        ): Promise<ChallengeResultInput> => {
+            const challengeRequestMessage = createChallengeRequestMessage({
+                publication: { author: { address: authorAddress } }
+            });
+            const result = await challengeFile.getChallenge(getChallengeArgs(community, challengeRequestMessage));
+            if (!isChallengeInput(result)) throw Error("Expected a pending challenge");
+            return result.verify!(voucher);
+        };
+
+        const stateFilePathFor = (communityAddress: string): string =>
+            path.join(tempDir, "communities", `${communityAddress}-challenge-data`, "voucher_redemption_states.json");
+
+        const writeStateFile = async (communityAddress: string, state: Record<string, string>, modifiedAt: Date): Promise<void> => {
+            const filePath = stateFilePathFor(communityAddress);
+            await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+            await fs.promises.writeFile(filePath, JSON.stringify(state));
+            await fs.promises.utimes(filePath, modifiedAt, modifiedAt);
+        };
+
+        const hoursAgo = (hours: number): Date => new Date(Date.now() - hours * 60 * 60 * 1000);
+
+        // pkc-js keeps community.signer.address and changes community.address when the owner sets or removes a domain name
+        const createKeyAddressedCommunity = () => {
+            const community = createCommunity();
+            community.address = "12D3communityKey";
+            community.signer.address = "12D3communityKey";
+            return community;
+        };
+
+        it("keeps redemptions after the owner sets a domain name on the community", async () => {
+            const community = createKeyAddressedCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            expect((await verifyAs(challengeFile, community, "author1", "VOUCHER1")).success).to.be.true;
+
+            community.address = "my-community.bso";
+
+            const verification = await verifyAs(challengeFile, community, "author2", "VOUCHER1");
+            expect(verification.success).to.be.false;
+            if (verification.success === false) {
+                expect(verification.error).to.equal("This voucher has already been redeemed by another author.");
+            }
+
+            community.address = "12D3communityKey";
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER2")).success).to.be.true;
+            community.address = "my-community.bso";
+            expect((await verifyAs(challengeFile, community, "author3", "VOUCHER2")).success).to.be.false;
+        });
+
+        it("merges the state an older version saved under the community's domain name", async () => {
+            const community = createKeyAddressedCommunity();
+            community.address = "my-community.bso";
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            // Older versions keyed the file by community.address: redemptions from before the domain was set,
+            // and the file for the domain name, written after it
+            await writeStateFile("12D3communityKey", { VOUCHER2: "earlier_author" }, hoursAgo(2));
+            await writeStateFile("my-community.bso", { VOUCHER1: "author1" }, hoursAgo(1));
+
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER1")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER2")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "earlier_author", "VOUCHER2")).success).to.be.true;
+
+            expect(JSON.parse(await fs.promises.readFile(stateFilePathFor("12D3communityKey"), "utf8"))).to.deep.equal({
+                VOUCHER1: "author1",
+                VOUCHER2: "earlier_author"
+            });
+            expect(fs.existsSync(stateFilePathFor("my-community.bso"))).to.be.false;
+
+            community.address = "renamed-community.bso";
+            expect((await verifyAs(challengeFile, community, "author3", "VOUCHER1")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "author3", "VOUCHER2")).success).to.be.false;
+        });
+
+        it("keeps redemptions from a file an older version left under a previous domain name", async () => {
+            const community = createKeyAddressedCommunity();
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            await writeStateFile("old-name.bso", { VOUCHER2: "earlier_author" }, hoursAgo(2));
+            await writeStateFile("12D3communityKey", { VOUCHER1: "author1" }, hoursAgo(1));
+
+            // The owner goes back to the domain name the community had before
+            community.address = "old-name.bso";
+
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER1")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER2")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "earlier_author", "VOUCHER2")).success).to.be.true;
+        });
+
+        it.each([
+            { newerFile: "the file for the domain name", domainFileAge: 1, keyFileAge: 2, holder: "author2", otherAuthor: "author1" },
+            { newerFile: "the signer-keyed file", domainFileAge: 2, keyFileAge: 1, holder: "author1", otherAuthor: "author2" }
+        ])("keeps the binding from $newerFile when both files hold the same voucher", async ({ domainFileAge, keyFileAge, holder, otherAuthor }) => {
+            const community = createKeyAddressedCommunity();
+            community.address = "my-community.bso";
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            await writeStateFile("12D3communityKey", { VOUCHER1: "author1" }, hoursAgo(keyFileAge));
+            await writeStateFile("my-community.bso", { VOUCHER1: "author2" }, hoursAgo(domainFileAge));
+
+            expect((await verifyAs(challengeFile, community, otherAuthor, "VOUCHER1")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, holder, "VOUCHER1")).success).to.be.true;
+        });
+
+        it("repeats the merge when the file for the domain name could not be removed", async () => {
+            const community = createKeyAddressedCommunity();
+            community.address = "my-community.bso";
+            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+
+            await writeStateFile("12D3communityKey", { VOUCHER2: "earlier_author" }, hoursAgo(2));
+            await writeStateFile("my-community.bso", { VOUCHER1: "author1" }, hoursAgo(1));
+
+            // A crash after the merged state was saved leaves the file for the domain name in place
+            vi.spyOn(fs.promises, "rm").mockRejectedValueOnce(Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }));
+            await expect(verifyAs(challengeFile, community, "author2", "VOUCHER3")).rejects.toThrow("EACCES");
+            vi.restoreAllMocks();
+
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER1")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER2")).success).to.be.false;
+            expect((await verifyAs(challengeFile, community, "author2", "VOUCHER3")).success).to.be.true;
+            expect(JSON.parse(await fs.promises.readFile(stateFilePathFor("12D3communityKey"), "utf8"))).to.deep.equal({
+                VOUCHER1: "author1",
+                VOUCHER2: "earlier_author",
+                VOUCHER3: "author2"
+            });
+            expect(fs.existsSync(stateFilePathFor("my-community.bso"))).to.be.false;
         });
     });
 });
