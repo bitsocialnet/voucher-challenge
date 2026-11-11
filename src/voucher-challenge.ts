@@ -145,26 +145,48 @@ const withStateFileLock = async <T>(filePath: string, task: () => Promise<T>): P
     }
 };
 
+// Like pkc-js does for roles keyed by a name, a name counts as the author's only when the node resolves author names
+// and the name resolves to the author's public key. A failed resolution counts as no match.
+const authorNameResolvesTo = async (community: LocalCommunity, name: string, publicKey: string): Promise<boolean> => {
+    if (!name.includes(".") || !community._pkc.resolveAuthorNames) return false;
+    try {
+        return (await community._pkc.resolveAuthorName({ address: name })) === publicKey;
+    } catch {
+        return false;
+    }
+};
+
 // Binds the voucher to the author's public key unless another author already holds it. Returns false in that case.
-const redeemVoucher = (
+const redeemVoucher = async (
     community: LocalCommunity,
     voucher: string,
     author: { publicKey: string; address: string }
-): Promise<boolean> =>
-    withStateFileLock(getVoucherStateFilePath(community), async () => {
-        const redeemedVouchers = await loadRedeemedVouchers(community);
-        const holder = redeemedVouchers[voucher];
+): Promise<boolean> => {
+    // Binds the voucher unless it is held by someone other than the author and `ownHolders`; returns that holder then.
+    const bindVoucher = (ownHolders: string[]): Promise<string | undefined> =>
+        withStateFileLock(getVoucherStateFilePath(community), async () => {
+            const redeemedVouchers = await loadRedeemedVouchers(community);
+            const holder = redeemedVouchers[voucher];
 
-        if (holder === author.publicKey) return true;
+            if (holder === author.publicKey) return undefined;
+            if (holder && !ownHolders.includes(holder)) return holder;
 
-        // Older versions stored author.address, which is the author's domain name when they have one.
-        // Such an entry is rebound to the public key of the author who presents that address.
-        if (holder && holder !== author.address) return false;
+            redeemedVouchers[voucher] = author.publicKey;
+            await saveRedeemedVouchers(community, redeemedVouchers);
+            return undefined;
+        });
 
-        redeemedVouchers[voucher] = author.publicKey;
-        await saveRedeemedVouchers(community, redeemedVouchers);
-        return true;
-    });
+    // Older versions stored author.address, which is the author's domain name when they have one.
+    // Such an entry is rebound to the public key of the author who presents that name.
+    const holder = await bindVoucher([author.address]);
+    if (holder === undefined) return true;
+
+    // If the holder has since changed or removed that name, it is rebound to the author the name resolves to.
+    // The name is resolved outside the lock so a slow resolver does not hold up other redemptions, and the
+    // entry is rebound only if it still holds that name.
+    if (!(await authorNameResolvesTo(community, holder, author.publicKey))) return false;
+    return (await bindVoucher([holder])) === undefined;
+};
 
 const getChallenge = async ({
     challengeSettings,
