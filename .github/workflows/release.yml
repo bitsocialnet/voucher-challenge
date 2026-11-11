@@ -6,6 +6,11 @@ on:
     types: ["completed"]
     branches: [master]
 
+# Two runs at once would both bump and tag from the same master, and the second push would be rejected.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -32,27 +37,28 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-      - name: Get current version
-        id: before
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
+      # Exits 0 when there are no commits since the latest tag (git.requireCommitsFail is false), so any
+      # failure, such as a rejected push, stops the job before a locally bumped version is published.
       - name: Run release-it
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release -- --ci || true
+        run: npm run release -- --ci
 
-      - name: Check if released
-        id: release
+      # Decide from the registry rather than from a bump in this run, so a re-run publishes a version
+      # that was tagged and released on GitHub but never reached npm.
+      - name: Check if the version is on npm
+        id: npm
         run: |
-          AFTER=$(node -p "require('./package.json').version")
-          if [ "${{ steps.before.outputs.version }}" != "$AFTER" ]; then
-            echo "Released v$AFTER"
-            echo "released=true" >> $GITHUB_OUTPUT
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "$NAME@$VERSION is already on npm"
+            echo "missing=false" >> "$GITHUB_OUTPUT"
           else
-            echo "No new version to release"
-            echo "released=false" >> $GITHUB_OUTPUT
+            echo "$NAME@$VERSION is not on npm"
+            echo "missing=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish to npm
-        if: steps.release.outputs.released == 'true'
+        if: steps.npm.outputs.missing == 'true'
         run: npx --yes npm@latest publish --access public --provenance

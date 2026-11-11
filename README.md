@@ -4,7 +4,9 @@ Standalone voucher challenge extracted from `plebbit-js`, packaged with independ
 
 ## How it works
 
-Community owners configure a list of voucher codes on their community. When a user publishes for the first time, they are prompted to enter a voucher code. Once redeemed, the voucher becomes permanently bound to the user's `author.address` — that author can continue using the same voucher for future publications (posts, replies, votes), but no other author can claim it. This prevents voucher sharing across different users.
+Community owners configure a list of voucher codes on their community. When a user publishes for the first time, they are prompted to enter a voucher code. Once redeemed, the voucher becomes permanently bound to the author's public key (`author.publicKey`), so it keeps working when the author sets or removes a domain name — that author can continue using the same voucher for future publications (posts, replies, votes), but no other author can claim it. This prevents voucher sharing across different users.
+
+A voucher redeemed with an older version of this challenge may be bound to a domain name, because those versions stored `author.address`. When the node resolves author names (`resolveAuthorNames`, on by default), only the author whose public key the name resolves to can use it, whether or not they still publish with the name, and their first use moves it to that key. When the node does not resolve author names, it cannot tell who holds the name, so the voucher stays bound to the name and, as before, works for any author who publishes with that name. Turning `resolveAuthorNames` on moves it to its holder's public key at their next use.
 
 ## Requirements
 
