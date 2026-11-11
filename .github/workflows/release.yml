@@ -53,10 +53,10 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
             echo "$NAME@$VERSION is already on npm"
-            echo "missing=false" >> $GITHUB_OUTPUT
+            echo "missing=false" >> "$GITHUB_OUTPUT"
           else
             echo "$NAME@$VERSION is not on npm"
-            echo "missing=true" >> $GITHUB_OUTPUT
+            echo "missing=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish to npm
