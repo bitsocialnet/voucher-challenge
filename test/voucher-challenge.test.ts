@@ -534,17 +534,7 @@ describe("voucher challenge", () => {
             }
         });
 
-        it("rebinds a voucher stored under an author name by older versions to the holder's public key", async () => {
-            const community = createCommunity();
-            const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
-            await fs.promises.mkdir(path.dirname(stateFilePath(community)), { recursive: true });
-            await fs.promises.writeFile(stateFilePath(community), JSON.stringify({ VOUCHER1: "alice.bso" }));
-
-            expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
-            expect(JSON.parse(await fs.promises.readFile(stateFilePath(community), "utf8"))).to.deep.equal({ VOUCHER1: "12D3aliceKey" });
-        });
-
-        describe("voucher stored under an author name the holder no longer presents", () => {
+        describe("voucher stored under an author name by older versions", () => {
             // A community whose node resolves author names, with alice.bso pointing to Alice's key
             const createResolvingCommunity = (resolveAuthorNames = true, resolveAuthorName = async () => "12D3aliceKey") => {
                 const community = createCommunity();
@@ -555,6 +545,44 @@ describe("voucher challenge", () => {
                 await fs.promises.mkdir(path.dirname(stateFilePath(community)), { recursive: true });
                 await fs.promises.writeFile(stateFilePath(community), JSON.stringify({ VOUCHER1: "alice.bso" }));
             };
+
+            const otherSignerWithAliceName: RuntimeAuthor = { name: "alice.bso", address: "alice.bso", publicKey: "12D3otherKey" };
+
+            it("rebinds the voucher to the holder's public key when the name they present resolves to it", async () => {
+                const community = createResolvingCommunity();
+                const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+                await writeLegacyState(community);
+
+                expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+                expect(community._pkc.resolveAuthorName).toHaveBeenCalledWith({ address: "alice.bso" });
+                expect(JSON.parse(await fs.promises.readFile(stateFilePath(community), "utf8"))).to.deep.equal({ VOUCHER1: "12D3aliceKey" });
+            });
+
+            it("rejects another signer that presents the stored name when the name resolves to a different public key", async () => {
+                const community = createResolvingCommunity();
+                const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+                await writeLegacyState(community);
+
+                const verification = await verifyAs(challengeFile, community, otherSignerWithAliceName, "VOUCHER1");
+                expect(verification.success).to.be.false;
+                if (verification.success === false) {
+                    expect(verification.error).to.equal("This voucher has already been redeemed by another author.");
+                }
+                expect(JSON.parse(await fs.promises.readFile(stateFilePath(community), "utf8"))).to.deep.equal({ VOUCHER1: "alice.bso" });
+                expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+            });
+
+            it("keeps the voucher bound to the name when the node does not resolve author names", async () => {
+                const community = createResolvingCommunity(false);
+                const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
+                await writeLegacyState(community);
+
+                // The node cannot tell who holds the name, so, as older versions did, it accepts any author presenting it
+                expect((await verifyAs(challengeFile, community, otherSignerWithAliceName, "VOUCHER1")).success).to.be.true;
+                expect(JSON.parse(await fs.promises.readFile(stateFilePath(community), "utf8"))).to.deep.equal({ VOUCHER1: "alice.bso" });
+                expect((await verifyAs(challengeFile, community, aliceWithName, "VOUCHER1")).success).to.be.true;
+                expect(community._pkc.resolveAuthorName).not.toHaveBeenCalled();
+            });
 
             it("accepts the holder when the stored name resolves to their public key", async () => {
                 const community = createResolvingCommunity();
@@ -589,11 +617,11 @@ describe("voucher challenge", () => {
                 expect(community._pkc.resolveAuthorName).not.toHaveBeenCalled();
             });
 
-            it("keeps a rebinding made by the name's presenter while the name was being resolved", async () => {
-                const community = createResolvingCommunity();
+            it("keeps a rebinding made by another author while the name was being resolved", async () => {
+                // alice.bso now points to another key, but the first resolution returns Alice's key from before the move
+                const community = createResolvingCommunity(true, async () => "12D3otherKey");
                 const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
                 await writeLegacyState(community);
-                const otherSignerWithAliceName: RuntimeAuthor = { name: "alice.bso", address: "alice.bso", publicKey: "12D3otherKey" };
                 community._pkc.resolveAuthorName.mockImplementationOnce(async () => {
                     // Another redemption runs while the name resolves, so the lock is not held during resolution
                     expect((await verifyAs(challengeFile, community, otherSignerWithAliceName, "VOUCHER1")).success).to.be.true;
