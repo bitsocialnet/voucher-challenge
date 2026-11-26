@@ -21,7 +21,7 @@ describe("voucher challenge", () => {
 
     interface ChallengeRequestOverrides {
         publication?: Record<string, unknown>;
-        challengeAnswers?: string[];
+        challengeAnswers?: Record<string, string>;
         [key: string]: unknown;
     }
 
@@ -202,7 +202,7 @@ describe("voucher challenge", () => {
         it("handles pre-answered challenges correctly", async () => {
             const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage({
-                challengeAnswers: ["VOUCHER1"]
+                challengeAnswers: { "0": "VOUCHER1" }
             });
             const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
@@ -215,7 +215,7 @@ describe("voucher challenge", () => {
         it("rejects pre-answered challenges with invalid voucher", async () => {
             const community = createCommunity();
             const challengeRequestMessage = createChallengeRequestMessage({
-                challengeAnswers: ["INVALID_VOUCHER"]
+                challengeAnswers: { "0": "INVALID_VOUCHER" }
             });
             const challengeFile = voucherChallenge({ challengeSettings: community.settings.challenges[0] } as Parameters<typeof voucherChallenge>[0]);
 
